@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="text/javascript">
+        
+        function video() {
+            let video = document.getElementById("live");
+            let canvas = document.getElementById("canvas");
+            let canvas2 = document.getElementById("canvas2");
+            let ctx = canvas.getContext('2d');
+            let ctx2 = canvas2.getContext('2d');
+            let apiKey = document.getElementById("apiKey").value;
+            
+            var similarity_max = 0;
+            
+            navigator.mediaDevices.getUserMedia({
+                video: {width: 800, height: 600}
+            }).then(function (stream) {
+                video.srcObject = stream;
+
+                document.addEventListener("next_frame", draw);
+
+                const evt = new Event("next_frame", {"bubbles": true, "cancelable": false});
+                document.dispatchEvent(evt);
+            });
+
+            function draw() {
+                ctx.drawImage(video, 0, 0, 800, 600);
+                canvas.toBlob(function (blob) {
+                    blob.name = "blob.jpeg"
+                    let fd = new FormData();
+                    fd.append('file', blob, "blob.jpeg");
+
+                    fetch('http://localhost:8000/api/v1/recognition/recognize',
+                        {
+                            method: "POST",
+                            headers: {
+                                "x-api-key": apiKey
+                            },
+                            body: fd
+                        }
+                    ).then(r => r.json()).then(
+                        function (data) {
+                            const evt = new Event("next_frame", {"bubbles": true, "cancelable": false});
+                            document.dispatchEvent(evt);
+                            ctx2.clearRect(0, 0, 800, 600);
+                            ctx2.drawImage(video, 0, 0, 800, 600);
+                            if (!data.result) {
+                                return;
+                            }
+                            let box = data.result[0].box;
+                            let name = data.result[0].subjects[0].subject;
+                            let similarity = data.result[0].subjects[0].similarity;
+
+                            document.getElementById("scan").innerHTML = "Sarnasus on hetkel " + (similarity*100).toFixed(2) + '%';
+                            
+                            if (similarity > similarity_max) {
+                                similarity_max = similarity;
+                                document.getElementById("similarity").innerHTML = "Sarnasus on " + (similarity_max*100).toFixed(2) + '%';
+                            }                     
+
+                            console.log(data)
+                            ctx2.lineWidth = 3;
+                            ctx2.strokeStyle = 'green';
+                            ctx2.strokeRect(box.x_min, box.y_min, box.x_max - box.x_min, box.y_max - box.y_min);
+                            ctx2.font = '24px serif';
+                            ctx2.strokeText(name, box.x_min, box.y_min - 20);
+                            //ctx2.strokeText(similarity, box.x_min, box.y_min - 20);
+                        });
+                }, 'image/jpeg', 0.95);
+            }
+
+        }
+
+
+    </script>
+    <style>
+        body {
+            background-color: dimgray;
+        }
+
+        #raam {
+            margin: auto;
+            width: 50%;
+            text-align: center;
+        }
+    </style>
+    <title>test</title>
+</head>
+    <body>
+        <div id="raam">
+            <div>
+                <video id="live" width="800" height="600" autoplay style="display:none;"></video>
+                <canvas width="800" id="canvas" height="600" style="display:none;"></canvas>
+                <canvas width="800" id="canvas2" height="600"></canvas>
+            </div>
+            <div>
+                <p id="scan"></p>
+                <p id="similarity"></p>
+            </div>
+            <div>
+                <input hidden value="ee370432-22ea-4fe7-8c08-756e8b42f93f" id="apiKey" />
+                <button onclick="video()">ALUSTA</button>
+            </div>
+            <div>
+                <button id="reset" onclick="window.location.reload()">LÄHTESTA</button>
+            </div>
+        </div>
+    </body>
+</html>
